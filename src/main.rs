@@ -5,12 +5,13 @@ use git::find_gitroot;
 use std::env;
 #[allow(unused_imports)]
 use std::fs;
+use std::path::Path;
 
 use clap::{Parser, Subcommand};
 
-use crate::git::get_object;
 use crate::git::put_object;
 use crate::git::{GitObject, TreeEntryMode};
+use crate::git::{TreeEntry, get_object};
 
 mod git;
 
@@ -39,6 +40,7 @@ enum Command {
         name_only: bool,
         sha: String,
     },
+    WriteTree,
 }
 
 fn main() -> Result<()> {
@@ -108,6 +110,43 @@ fn main() -> Result<()> {
                 }
                 _ => bail!("not a tree object"),
             }
+        }
+        Command::WriteTree => {
+            let git_root = find_gitroot().ok_or_else(|| anyhow!("not a .git repository"))?;
+
+            fn obj_sha(git_root: &Path, path: &Path) -> Result<String> {
+                let metadata = std::fs::metadata(path)?;
+
+                if metadata.is_file() {
+                    let content = std::fs::read(path)?;
+                    put_object(git_root, &GitObject::Blob(content))
+                } else if metadata.is_dir() {
+                    let mut entries = Vec::new();
+
+                    let results = std::fs::read_dir(path)?;
+                    for file in results {
+                        if let Ok(file) = file {
+                            if !file.file_name().to_string_lossy().starts_with(".") {
+                                let sha1 = obj_sha(git_root, &file.path())?;
+                                entries.push(TreeEntry {
+                                    mode: TreeEntryMode::Directory,
+                                    name: file.file_name().display().to_string(),
+                                    sha1: hex::decode(sha1)?,
+                                });
+                            }
+                        }
+                    }
+
+                    put_object(git_root, &GitObject::Tree(entries))
+                } else {
+                    bail!("unsupported file")
+                }
+            }
+
+            let cwd = std::env::current_dir()?;
+            let sha = obj_sha(&git_root, &cwd)?;
+
+            println!("{}", sha);
         }
     }
 
