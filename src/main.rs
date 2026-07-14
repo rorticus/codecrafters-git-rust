@@ -9,7 +9,7 @@ use std::path::Path;
 
 use clap::{Parser, Subcommand};
 
-use crate::git::put_object;
+use crate::git::{CommitPerson, put_object};
 use crate::git::{GitObject, TreeEntryMode};
 use crate::git::{TreeEntry, get_object};
 
@@ -41,6 +41,13 @@ enum Command {
         sha: String,
     },
     WriteTree,
+    CommitTree {
+        sha: String,
+        #[arg(short = 'p')]
+        parent: String,
+        #[arg(short = 'm')]
+        message: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -162,6 +169,24 @@ fn main() -> Result<()> {
             let entry = obj_sha(&git_root, &cwd)?;
 
             println!("{}", hex::encode(entry.sha1));
+        }
+        Command::CommitTree {
+            sha,
+            parent,
+            message,
+        } => {
+            let git_root = find_gitroot().ok_or_else(|| anyhow!("not a .git repository"))?;
+            let obj = GitObject::Commit {
+                tree: sha,
+                parent,
+                author: CommitPerson::demo(),
+                committer: CommitPerson::demo(),
+                message,
+            };
+
+            let hash = put_object(&git_root, &obj)?;
+
+            println!("{}", hash);
         }
     }
 

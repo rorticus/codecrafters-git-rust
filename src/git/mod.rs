@@ -20,9 +20,23 @@ pub struct TreeEntry {
     pub sha1: Vec<u8>,
 }
 
+pub struct CommitPerson {
+    name: String,
+    email: String,
+    timestamp: String,
+    timezone: String,
+}
+
 pub enum GitObject {
     Blob(Vec<u8>),
     Tree(Vec<TreeEntry>),
+    Commit {
+        tree: String,
+        parent: String,
+        author: CommitPerson,
+        committer: CommitPerson,
+        message: String,
+    },
 }
 
 pub fn find_gitroot() -> Option<PathBuf> {
@@ -86,6 +100,44 @@ pub fn get_object(git_root: &Path, sha: &str) -> Result<GitObject> {
 
                 Ok(GitObject::Tree(entries))
             }
+            "commit" => {
+                let mut is_message = false;
+                let mut tree_sha = None;
+                let mut parent_sha = None;
+                let mut author = None;
+                let mut committer = None;
+                let mut message = String::new();
+
+                for line in std::str::from_utf8(content)?.lines() {
+                    if !is_message {
+                        if let Some(tree) = line.strip_prefix("tree ") {
+                            tree_sha = Some(tree.to_string());
+                        }
+
+                        if let Some(sha) = line.strip_prefix("parent ") {
+                            parent_sha = Some(sha.to_string());
+                        }
+                        if let Some(author_str) = line.strip_prefix("author ") {
+                            author = Some(CommitPerson::parse(author_str)?);
+                        }
+                        if let Some(committer_str) = line.strip_prefix("committer ") {
+                            committer = Some(CommitPerson::parse(committer_str)?);
+                        } else if line == "" {
+                            is_message = true;
+                        }
+                    } else {
+                        message = message + line;
+                    }
+                }
+
+                Ok(GitObject::Commit {
+                    tree: tree_sha.ok_or_else(|| anyhow!("missing tree sha"))?,
+                    parent: parent_sha.ok_or_else(|| anyhow!("missing parent commit"))?,
+                    author: author.ok_or_else(|| anyhow!("missing author"))?,
+                    committer: committer.ok_or_else(|| anyhow!("missing committer"))?,
+                    message,
+                })
+            }
             t => bail!("unsupported object type {}", t),
         }
     } else {
@@ -128,6 +180,29 @@ pub fn put_object(git_root: &Path, obj: &GitObject) -> Result<String> {
 
             bytes.extend(format!("tree {}\0", tree_data.len()).as_bytes());
             bytes.extend(tree_data);
+            bytes
+        }
+        GitObject::Commit {
+            tree,
+            parent,
+            author,
+            committer,
+            message,
+        } => {
+            let mut bytes = Vec::new();
+            let mut content = String::new();
+
+            content += format!("tree {}\n", tree).as_str();
+            content += format!("parent {}\n", parent).as_str();
+            content += format!("author {}\n", author.to_str()).as_str();
+            content += format!("committer {}\n", committer.to_str()).as_str();
+            content += "\n";
+            content += message;
+
+            let content_bytes = content.as_bytes();
+
+            bytes.extend(format!("commit {}\0", content_bytes.len()).as_bytes());
+            bytes.extend(content_bytes);
             bytes
         }
     };
@@ -184,5 +259,44 @@ impl TreeEntryMode {
             TreeEntryMode::Directory => "40000".to_string(),
             TreeEntryMode::Unsupported(m) => m.clone(),
         }
+    }
+}
+
+impl CommitPerson {
+    pub fn demo() -> Self {
+        CommitPerson {
+            name: "John Doe".to_string(),
+            email: "john@example.com".to_string(),
+            timestamp: "1234567890".to_string(),
+            timezone: "+0000".to_string(),
+        }
+    }
+
+    pub fn parse(input: &str) -> Result<Self> {
+        // <name> <<email>> <timestamp> <timezone>
+        let parts: Vec<&str> = input.split(" ").collect();
+
+        if parts.len() != 4 {
+            bail!("malformed commita author");
+        }
+
+        return Ok(CommitPerson {
+            name: parts[0].to_string(),
+            email: parts[1]
+                .strip_prefix("<")
+                .ok_or_else(|| anyhow!("expecting email to start with <"))?
+                .strip_suffix(">")
+                .ok_or_else(|| anyhow!("expecting email to end with >"))?
+                .to_string(),
+            timestamp: parts[2].to_string(),
+            timezone: parts[3].to_string(),
+        });
+    }
+
+    pub fn to_str(&self) -> String {
+        format!(
+            "{} <{}> {} {}",
+            self.name, self.email, self.timestamp, self.timezone
+        )
     }
 }
