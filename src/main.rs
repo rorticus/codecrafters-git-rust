@@ -35,7 +35,7 @@ enum Command {
         file: String,
     },
     LsTree {
-        #[arg(long = "--name-only")]
+        #[arg(long = "name-only")]
         name_only: bool,
         sha: String,
     },
