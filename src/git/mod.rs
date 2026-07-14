@@ -55,7 +55,7 @@ pub fn get_object(git_root: &Path, sha: &str) -> Result<GitObject> {
     }
 }
 
-pub fn put_object(git_root: &Path, obj: &GitObject) -> Result<PathBuf> {
+pub fn put_object(git_root: &Path, obj: &GitObject) -> Result<String> {
     let obj_content: Vec<u8> = match obj {
         GitObject::Blob(data) => {
             let mut bytes = Vec::new();
@@ -80,7 +80,7 @@ pub fn put_object(git_root: &Path, obj: &GitObject) -> Result<PathBuf> {
 
     std::fs::write(&object_path, &compressed_data)?;
 
-    return Ok(object_path);
+    return Ok(sha);
 }
 
 fn zlib_compress(data: &[u8]) -> std::io::Result<Vec<u8>> {

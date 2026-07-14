@@ -68,7 +68,9 @@ fn main() -> Result<()> {
             let obj = GitObject::Blob(data);
 
             if write {
-                put_object(&git_root, &obj)?;
+                let sha = put_object(&git_root, &obj)?;
+
+                println!("{}", sha);
             }
         }
     }
