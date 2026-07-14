@@ -10,6 +10,7 @@ use clap::{Parser, Subcommand};
 
 use crate::git::GitObject;
 use crate::git::get_object;
+use crate::git::put_object;
 
 mod git;
 
@@ -27,6 +28,11 @@ enum Command {
         #[arg(short = 'p')]
         print: bool,
         sha: String,
+    },
+    HashObject {
+        #[arg(short = 'w')]
+        write: bool,
+        file: String,
     },
 }
 
@@ -53,6 +59,16 @@ fn main() -> Result<()> {
                         print!("{}", b as char);
                     }
                 }
+            }
+        }
+        Command::HashObject { write, file } => {
+            let git_root = find_gitroot().ok_or_else(|| anyhow!("not a .git repository"))?;
+            let data = std::fs::read(file)?;
+
+            let obj = GitObject::Blob(data);
+
+            if write {
+                put_object(&git_root, &obj)?;
             }
         }
     }
