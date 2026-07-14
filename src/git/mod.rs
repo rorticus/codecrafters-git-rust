@@ -2,13 +2,21 @@ use anyhow::{Result, anyhow, bail};
 use flate2::Compression;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
+use hex;
 use sha1::{Digest, Sha1};
 use std::io::Read;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+pub struct TreeEntry {
+    pub mode: String,
+    pub name: String,
+    pub sha1: Vec<u8>,
+}
+
 pub enum GitObject {
     Blob(Vec<u8>),
+    Tree(Vec<TreeEntry>),
 }
 
 pub fn find_gitroot() -> Option<PathBuf> {
@@ -48,6 +56,30 @@ pub fn get_object(git_root: &Path, sha: &str) -> Result<GitObject> {
 
         match obj_type {
             "blob" => Ok(GitObject::Blob(content.to_vec())),
+            "tree" => {
+                let mut entries = Vec::new();
+
+                let mut content_left = &content[..];
+                loop {
+                    if content_left.len() == 0 {
+                        break;
+                    }
+
+                    let (mode, rest) = split_once_byte(content_left, b' ').unwrap();
+                    let (name, rest) = split_once_byte(rest, b'\0').unwrap();
+                    let sha1 = &rest[0..20].to_vec();
+
+                    content_left = &rest[20..];
+
+                    entries.push(TreeEntry {
+                        mode: std::str::from_utf8(mode)?.to_string(),
+                        name: std::str::from_utf8(name)?.to_string(),
+                        sha1: sha1.clone(),
+                    });
+                }
+
+                Ok(GitObject::Tree(entries))
+            }
             t => bail!("unsupported object type {}", t),
         }
     } else {
@@ -61,6 +93,22 @@ pub fn put_object(git_root: &Path, obj: &GitObject) -> Result<String> {
             let mut bytes = Vec::new();
             bytes.extend(format!("blob {}\0", data.len()).as_bytes());
             bytes.extend(data);
+            bytes
+        }
+        GitObject::Tree(entries) => {
+            let mut bytes = Vec::new();
+            let mut tree_data = Vec::new();
+
+            for entry in entries {
+                tree_data.extend(entry.mode.as_bytes());
+                tree_data.push(b' ');
+                tree_data.extend(entry.name.as_bytes());
+                tree_data.push(b'\0');
+                tree_data.extend(&entry.sha1);
+            }
+
+            bytes.extend(format!("tree {}\0", tree_data.len()).as_bytes());
+            bytes.extend(tree_data);
             bytes
         }
     };

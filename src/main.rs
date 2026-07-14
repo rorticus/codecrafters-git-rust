@@ -1,5 +1,5 @@
 use anyhow::Result;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use git::find_gitroot;
 #[allow(unused_imports)]
 use std::env;
@@ -34,6 +34,11 @@ enum Command {
         write: bool,
         file: String,
     },
+    LsTree {
+        #[arg(long = "--name-only")]
+        name_only: bool,
+        sha: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -55,10 +60,13 @@ fn main() -> Result<()> {
 
             match obj {
                 GitObject::Blob(data) => {
-                    for &b in &data {
-                        print!("{}", b as char);
+                    if print {
+                        for &b in &data {
+                            print!("{}", b as char);
+                        }
                     }
                 }
+                _ => bail!("not a blob"),
             }
         }
         Command::HashObject { write, file } => {
@@ -71,6 +79,22 @@ fn main() -> Result<()> {
                 let sha = put_object(&git_root, &obj)?;
 
                 println!("{}", sha);
+            }
+        }
+        Command::LsTree { name_only, sha } => {
+            let git_root = find_gitroot().ok_or_else(|| anyhow!("not a .git repository"))?;
+
+            let obj = get_object(&git_root, &sha)?;
+
+            match obj {
+                GitObject::Tree(entries) => {
+                    for entry in entries {
+                        if name_only {
+                            println!("{}", entry.name);
+                        }
+                    }
+                }
+                _ => bail!("not a tree object"),
             }
         }
     }

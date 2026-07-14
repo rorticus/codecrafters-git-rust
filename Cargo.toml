@@ -12,3 +12,4 @@ flate2 = "1.0.34"                                # compression
 thiserror = "1.0.38"                             # error handling
 clap = { version = "4.0.32", features = ["derive"] }                # creating a cli
 sha1 = "0.10"
+hex = "0.4"
