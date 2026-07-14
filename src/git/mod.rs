@@ -93,6 +93,14 @@ pub fn get_object(git_root: &Path, sha: &str) -> Result<GitObject> {
     }
 }
 
+fn sort_key(entry: &TreeEntry) -> Vec<u8> {
+    let mut key = entry.name.as_bytes().to_vec();
+    if let TreeEntryMode::Directory = entry.mode {
+        key.push(b'/');
+    }
+    key
+}
+
 pub fn put_object(git_root: &Path, obj: &GitObject) -> Result<String> {
     let obj_content: Vec<u8> = match obj {
         GitObject::Blob(data) => {
@@ -104,6 +112,11 @@ pub fn put_object(git_root: &Path, obj: &GitObject) -> Result<String> {
         GitObject::Tree(entries) => {
             let mut bytes = Vec::new();
             let mut tree_data = Vec::new();
+
+            // Git sorts tree entries by name, treating directories as if their
+            // name had a trailing '/'.
+            let mut entries: Vec<&TreeEntry> = entries.iter().collect();
+            entries.sort_by(|a, b| sort_key(a).cmp(&sort_key(b)));
 
             for entry in entries {
                 tree_data.extend(entry.mode.to_mode().as_bytes());

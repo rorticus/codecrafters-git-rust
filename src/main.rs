@@ -114,12 +114,22 @@ fn main() -> Result<()> {
         Command::WriteTree => {
             let git_root = find_gitroot().ok_or_else(|| anyhow!("not a .git repository"))?;
 
-            fn obj_sha(git_root: &Path, path: &Path) -> Result<String> {
+            fn obj_sha(git_root: &Path, path: &Path) -> Result<TreeEntry> {
                 let metadata = std::fs::metadata(path)?;
 
                 if metadata.is_file() {
                     let content = std::fs::read(path)?;
-                    put_object(git_root, &GitObject::Blob(content))
+                    let sha1 = put_object(git_root, &GitObject::Blob(content))?;
+
+                    Ok(TreeEntry {
+                        mode: TreeEntryMode::RegularFile,
+                        name: path
+                            .file_name()
+                            .ok_or_else(|| anyhow!("path has no file name: {}", path.display()))?
+                            .to_string_lossy()
+                            .to_string(),
+                        sha1: hex::decode(sha1)?,
+                    })
                 } else if metadata.is_dir() {
                     let mut entries = Vec::new();
 
@@ -127,26 +137,31 @@ fn main() -> Result<()> {
                     for file in results {
                         if let Ok(file) = file {
                             if !file.file_name().to_string_lossy().starts_with(".") {
-                                let sha1 = obj_sha(git_root, &file.path())?;
-                                entries.push(TreeEntry {
-                                    mode: TreeEntryMode::Directory,
-                                    name: file.file_name().display().to_string(),
-                                    sha1: hex::decode(sha1)?,
-                                });
+                                let entry = obj_sha(git_root, &file.path())?;
+                                entries.push(entry);
                             }
                         }
                     }
 
-                    put_object(git_root, &GitObject::Tree(entries))
+                    let sha1 = put_object(git_root, &GitObject::Tree(entries))?;
+                    Ok(TreeEntry {
+                        mode: TreeEntryMode::Directory,
+                        name: path
+                            .file_name()
+                            .ok_or_else(|| anyhow!("path has no file name: {}", path.display()))?
+                            .to_string_lossy()
+                            .to_string(),
+                        sha1: hex::decode(sha1)?,
+                    })
                 } else {
                     bail!("unsupported file")
                 }
             }
 
             let cwd = std::env::current_dir()?;
-            let sha = obj_sha(&git_root, &cwd)?;
+            let entry = obj_sha(&git_root, &cwd)?;
 
-            println!("{}", sha);
+            println!("{}", hex::encode(entry.sha1));
         }
     }
 
