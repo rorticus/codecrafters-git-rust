@@ -198,6 +198,7 @@ pub fn put_object(git_root: &Path, obj: &GitObject) -> Result<String> {
             content += format!("committer {}\n", committer.to_str()).as_str();
             content += "\n";
             content += message;
+            content += "\n";
 
             let content_bytes = content.as_bytes();
 
