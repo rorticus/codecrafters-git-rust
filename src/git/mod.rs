@@ -2,14 +2,20 @@ use anyhow::{Result, anyhow, bail};
 use flate2::Compression;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
-use hex;
 use sha1::{Digest, Sha1};
 use std::io::Read;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+pub enum TreeEntryMode {
+    RegularFile,
+    ExecutableFile,
+    Directory,
+    Unsupported(String),
+}
+
 pub struct TreeEntry {
-    pub mode: String,
+    pub mode: TreeEntryMode,
     pub name: String,
     pub sha1: Vec<u8>,
 }
@@ -72,7 +78,7 @@ pub fn get_object(git_root: &Path, sha: &str) -> Result<GitObject> {
                     content_left = &rest[20..];
 
                     entries.push(TreeEntry {
-                        mode: std::str::from_utf8(mode)?.to_string(),
+                        mode: TreeEntryMode::from_mode(std::str::from_utf8(mode)?),
                         name: std::str::from_utf8(name)?.to_string(),
                         sha1: sha1.clone(),
                     });
@@ -100,7 +106,7 @@ pub fn put_object(git_root: &Path, obj: &GitObject) -> Result<String> {
             let mut tree_data = Vec::new();
 
             for entry in entries {
-                tree_data.extend(entry.mode.as_bytes());
+                tree_data.extend(entry.mode.to_mode().as_bytes());
                 tree_data.push(b' ');
                 tree_data.extend(entry.name.as_bytes());
                 tree_data.push(b'\0');
@@ -146,4 +152,24 @@ fn zlib_decompress(data: &[u8]) -> std::io::Result<Vec<u8>> {
 
 fn sha1_of(data: &[u8]) -> String {
     format!("{:x}", Sha1::digest(&data))
+}
+
+impl TreeEntryMode {
+    fn from_mode(mode: &str) -> Self {
+        match mode {
+            "100644" => TreeEntryMode::RegularFile,
+            "100755" => TreeEntryMode::ExecutableFile,
+            "40000" => TreeEntryMode::Directory,
+            _ => TreeEntryMode::Unsupported(mode.to_string()),
+        }
+    }
+
+    pub fn to_mode(&self) -> String {
+        match self {
+            TreeEntryMode::RegularFile => "100644".to_string(),
+            TreeEntryMode::ExecutableFile => "100755".to_string(),
+            TreeEntryMode::Directory => "40000".to_string(),
+            TreeEntryMode::Unsupported(m) => m.clone(),
+        }
+    }
 }

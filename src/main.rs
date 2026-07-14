@@ -8,9 +8,9 @@ use std::fs;
 
 use clap::{Parser, Subcommand};
 
-use crate::git::GitObject;
 use crate::git::get_object;
 use crate::git::put_object;
+use crate::git::{GitObject, TreeEntryMode};
 
 mod git;
 
@@ -91,6 +91,18 @@ fn main() -> Result<()> {
                     for entry in entries {
                         if name_only {
                             println!("{}", entry.name);
+                        } else {
+                            println!(
+                                "{} {} {}\t{}",
+                                entry.mode.to_mode(),
+                                if let TreeEntryMode::Directory = entry.mode {
+                                    "tree"
+                                } else {
+                                    "blob"
+                                },
+                                hex::encode(entry.sha1),
+                                entry.name
+                            )
                         }
                     }
                 }
