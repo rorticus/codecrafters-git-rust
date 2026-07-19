@@ -7,13 +7,11 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+mod git;
+
 use clap::{Parser, Subcommand};
 
-use crate::git::{CommitPerson, put_object};
-use crate::git::{GitObject, TreeEntryMode};
-use crate::git::{TreeEntry, get_object};
-
-mod git;
+use crate::git::{CommitPerson, ObjectKind, TreeEntry, TreeEntryMode, get_object, put_object};
 
 #[derive(Parser)]
 struct Args {
@@ -68,7 +66,7 @@ fn main() -> Result<()> {
             let obj = get_object(&git_root, &sha)?;
 
             match obj {
-                GitObject::Blob(data) => {
+                ObjectKind::Blob(data) => {
                     if print {
                         for &b in &data {
                             print!("{}", b as char);
@@ -82,7 +80,7 @@ fn main() -> Result<()> {
             let git_root = find_gitroot().ok_or_else(|| anyhow!("not a .git repository"))?;
             let data = std::fs::read(file)?;
 
-            let obj = GitObject::Blob(data);
+            let obj = ObjectKind::Blob(data);
 
             if write {
                 let sha = put_object(&git_root, &obj)?;
@@ -96,7 +94,7 @@ fn main() -> Result<()> {
             let obj = get_object(&git_root, &sha)?;
 
             match obj {
-                GitObject::Tree(entries) => {
+                ObjectKind::Tree(entries) => {
                     for entry in entries {
                         if name_only {
                             println!("{}", entry.name);
@@ -126,7 +124,7 @@ fn main() -> Result<()> {
 
                 if metadata.is_file() {
                     let content = std::fs::read(path)?;
-                    let sha1 = put_object(git_root, &GitObject::Blob(content))?;
+                    let sha1 = put_object(git_root, &ObjectKind::Blob(content))?;
 
                     Ok(TreeEntry {
                         mode: TreeEntryMode::RegularFile,
@@ -150,7 +148,7 @@ fn main() -> Result<()> {
                         }
                     }
 
-                    let sha1 = put_object(git_root, &GitObject::Tree(entries))?;
+                    let sha1 = put_object(git_root, &ObjectKind::Tree(entries))?;
                     Ok(TreeEntry {
                         mode: TreeEntryMode::Directory,
                         name: path
@@ -176,7 +174,7 @@ fn main() -> Result<()> {
             message,
         } => {
             let git_root = find_gitroot().ok_or_else(|| anyhow!("not a .git repository"))?;
-            let obj = GitObject::Commit {
+            let obj = ObjectKind::Commit {
                 tree: sha,
                 parent,
                 author: CommitPerson::demo(),
