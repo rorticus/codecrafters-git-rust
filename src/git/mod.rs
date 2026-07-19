@@ -1,9 +1,12 @@
 use std::path::PathBuf;
 
 mod objects;
+mod pktline;
+mod transport;
 
 pub use objects::kind::{CommitPerson, ObjectKind, TreeEntry, TreeEntryMode};
 pub use objects::{get_object, put_object};
+pub use transport::get_info_refs;
 
 pub fn find_gitroot() -> Option<PathBuf> {
     if let Ok(dir) = std::env::current_dir() {

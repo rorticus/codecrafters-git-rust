@@ -6,12 +6,15 @@ use std::env;
 #[allow(unused_imports)]
 use std::fs;
 use std::path::Path;
+use url::Url;
 
 mod git;
 
 use clap::{Parser, Subcommand};
 
-use crate::git::{CommitPerson, ObjectKind, TreeEntry, TreeEntryMode, get_object, put_object};
+use crate::git::{
+    CommitPerson, ObjectKind, TreeEntry, TreeEntryMode, get_info_refs, get_object, put_object,
+};
 
 #[derive(Parser)]
 struct Args {
@@ -45,6 +48,9 @@ enum Command {
         parent: String,
         #[arg(short = 'm')]
         message: String,
+    },
+    Clone {
+        url: String,
     },
 }
 
@@ -185,6 +191,11 @@ fn main() -> Result<()> {
             let hash = put_object(&git_root, &obj)?;
 
             println!("{}", hash);
+        }
+        Command::Clone { url } => {
+            let url = Url::parse(&url)?;
+
+            get_info_refs(url)?;
         }
     }
 
