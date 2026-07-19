@@ -195,7 +195,9 @@ fn main() -> Result<()> {
         Command::Clone { url } => {
             let url = Url::parse(&url)?;
 
-            get_info_refs(url)?;
+            let result = get_info_refs(url)?;
+
+            println!("{:?}", result);
         }
     }
 
