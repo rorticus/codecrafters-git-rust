@@ -14,7 +14,7 @@ use clap::{Parser, Subcommand};
 
 use crate::git::{
     CommitPerson, ObjectKind, TreeEntry, TreeEntryMode, build_request, get_info_refs, get_object,
-    parse_advertisement, post_upload_pack, put_object,
+    get_pack, parse_advertisement, post_upload_pack, put_object, strip_nak,
 };
 
 #[derive(Parser)]
@@ -201,9 +201,12 @@ fn main() -> Result<()> {
 
             let req_body = build_request(&[result.refs[0].sha.as_str()]);
 
-            post_upload_pack(&url, &req_body)?;
+            let upload_pack = post_upload_pack(&url, &req_body)?;
+            let no_nak = strip_nak(&upload_pack)?;
 
-            println!("{:?}", result);
+            let pack = get_pack(&no_nak)?;
+
+            println!("count of objects in pack: {}", pack.count);
         }
     }
 

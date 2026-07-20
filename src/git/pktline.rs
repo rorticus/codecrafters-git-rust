@@ -37,6 +37,12 @@ impl<'a> PktLineReader<'a> {
     pub fn new(buf: &'a [u8]) -> Self {
         PktLineReader { buf, pos: 0 }
     }
+
+    /// Bytes not yet consumed by the reader. Tied to the buffer's lifetime, so
+    /// the slice outlives the reader itself.
+    pub fn remaining(&self) -> &'a [u8] {
+        &self.buf[self.pos..]
+    }
 }
 
 impl<'a> Iterator for PktLineReader<'a> {
