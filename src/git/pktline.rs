@@ -9,13 +9,6 @@ pub enum PktLine<'a> {
 }
 
 impl<'a> PktLine<'a> {
-    pub fn trimmed(&self) -> Option<&'a [u8]> {
-        match self {
-            PktLine::Data(data) => Some(data.strip_suffix(b"\n").unwrap_or(data)),
-            _ => None,
-        }
-    }
-
     pub fn data(data: &'a [u8]) -> Self {
         return PktLine::Data(data);
     }
@@ -43,10 +36,6 @@ pub struct PktLineReader<'a> {
 impl<'a> PktLineReader<'a> {
     pub fn new(buf: &'a [u8]) -> Self {
         PktLineReader { buf, pos: 0 }
-    }
-
-    pub fn remaining(&self) -> &'a [u8] {
-        &self.buf[self.pos..]
     }
 }
 
@@ -116,8 +105,4 @@ fn encode(payload: &[u8]) -> Vec<u8> {
     out.extend_from_slice(payload);
 
     out
-}
-
-fn encode_str(str: &str) -> Vec<u8> {
-    encode(str.as_bytes())
 }

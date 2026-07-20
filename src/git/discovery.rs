@@ -2,12 +2,14 @@ use crate::git::pktline::{PktLine, PktLineReader};
 use anyhow::Result;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Ref {
     pub sha: String,
     pub name: String,
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Advertisement {
     pub capabilities: Vec<String>,
     pub refs: Vec<Ref>,

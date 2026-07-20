@@ -6,7 +6,7 @@ mod objects;
 mod pktline;
 mod transport;
 
-pub use discovery::{Advertisement, Ref, parse_advertisement};
+pub use discovery::parse_advertisement;
 pub use negotiate::build_request;
 pub use objects::kind::{CommitPerson, ObjectKind, TreeEntry, TreeEntryMode};
 pub use objects::{get_object, put_object};
