@@ -2,21 +2,7 @@ use anyhow::{Result, anyhow, bail};
 use reqwest;
 use url::Url;
 
-use crate::git::pktline::{PktLine, PktLineReader};
-
-#[derive(Debug)]
-pub struct Ref {
-    pub sha: String,
-    pub name: String,
-}
-
-#[derive(Debug)]
-pub struct InfoRefs {
-    pub capabilities: Vec<String>,
-    pub refs: Vec<Ref>,
-}
-
-pub fn get_info_refs(url: Url) -> Result<InfoRefs> {
+pub fn get_info_refs(url: &Url) -> Result<Vec<u8>> {
     let mut info_url = url.clone();
     info_url
         .path_segments_mut()
@@ -41,48 +27,27 @@ pub fn get_info_refs(url: Url) -> Result<InfoRefs> {
 
     let bytes = response.bytes()?;
 
-    let pkt_reader = PktLineReader::new(&bytes);
+    Ok(bytes.to_vec())
+}
 
-    let mut flushes = 0;
+pub fn post_upload_pack(url: &Url, body: &[u8]) -> Result<Vec<u8>> {
+    let mut negotiate_url = url.clone();
+    negotiate_url
+        .path_segments_mut()
+        .map_err(|_| anyhow!("bad repo URL"))?
+        .pop_if_empty()
+        .extend(&["git-upload-pack"]);
 
-    let mut refs = Vec::new();
-    let mut capabilities = Vec::new();
+    let client = reqwest::blocking::Client::builder().build()?;
 
-    for pkt_line in pkt_reader {
-        match pkt_line {
-            Ok(PktLine::Flush) => {
-                flushes += 1;
-            }
-            Ok(PktLine::Data(data)) => {
-                if flushes == 1 {
-                    let ref_bit = {
-                        if refs.len() == 0 {
-                            let zero = data.iter().position(|b| *b == 0).unwrap_or(0);
-                            let (ref_bit, rest) = data.split_at(zero);
+    let response = client
+        .post(negotiate_url)
+        .header("content-type", "application/x-git-upload-pack-request")
+        .header("accept", "application/x-git-upload-pack-result")
+        .body(body.to_vec())
+        .send()?;
 
-                            for cap in std::str::from_utf8(rest)?.split(" ") {
-                                capabilities.push(cap.to_string());
-                            }
+    let bytes = response.bytes()?;
 
-                            std::str::from_utf8(ref_bit)?
-                        } else {
-                            std::str::from_utf8(data)?
-                        }
-                    };
-
-                    let (sha, name) = ref_bit.split_once(" ").unwrap();
-
-                    refs.push(Ref {
-                        sha: sha.trim().to_string(),
-                        name: name.trim().to_string(),
-                    });
-                }
-            }
-            _ => {
-                println!("unexpected pktline");
-            }
-        }
-    }
-
-    Ok(InfoRefs { capabilities, refs })
+    Ok(bytes.to_vec())
 }

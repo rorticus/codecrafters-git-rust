@@ -13,7 +13,8 @@ mod git;
 use clap::{Parser, Subcommand};
 
 use crate::git::{
-    CommitPerson, ObjectKind, TreeEntry, TreeEntryMode, get_info_refs, get_object, put_object,
+    CommitPerson, ObjectKind, TreeEntry, TreeEntryMode, build_request, get_info_refs, get_object,
+    parse_advertisement, post_upload_pack, put_object,
 };
 
 #[derive(Parser)]
@@ -195,7 +196,12 @@ fn main() -> Result<()> {
         Command::Clone { url } => {
             let url = Url::parse(&url)?;
 
-            let result = get_info_refs(url)?;
+            let advertisement_bytes = get_info_refs(&url)?;
+            let result = parse_advertisement(&advertisement_bytes)?;
+
+            let req_body = build_request(&[result.refs[0].sha.as_str()]);
+
+            post_upload_pack(&url, &req_body)?;
 
             println!("{:?}", result);
         }

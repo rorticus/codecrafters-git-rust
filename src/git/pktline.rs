@@ -15,6 +15,24 @@ impl<'a> PktLine<'a> {
             _ => None,
         }
     }
+
+    pub fn data(data: &'a [u8]) -> Self {
+        return PktLine::Data(data);
+    }
+
+    pub fn flush() -> Self {
+        return PktLine::Flush;
+    }
+
+    /// Serialize into the length-prefixed pkt-line wire format.
+    pub fn encode(&self) -> Vec<u8> {
+        match self {
+            PktLine::Data(data) => encode(data),
+            PktLine::Flush => b"0000".to_vec(),
+            PktLine::Delim => b"0001".to_vec(),
+            PktLine::ResponseEnd => b"0002".to_vec(),
+        }
+    }
 }
 
 pub struct PktLineReader<'a> {
@@ -88,4 +106,18 @@ impl<'a> Iterator for PktLineReader<'a> {
 fn parse_len(hex: &[u8]) -> Result<usize> {
     let s = std::str::from_utf8(hex).map_err(|_| anyhow!("bad length"))?;
     usize::from_str_radix(s, 16).map_err(|_| anyhow!("bad length"))
+}
+
+fn encode(payload: &[u8]) -> Vec<u8> {
+    let len = payload.len() + 4;
+    let mut out = Vec::with_capacity(len);
+
+    out.extend_from_slice(format!("{len:04x}").as_bytes());
+    out.extend_from_slice(payload);
+
+    out
+}
+
+fn encode_str(str: &str) -> Vec<u8> {
+    encode(str.as_bytes())
 }
