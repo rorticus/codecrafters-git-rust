@@ -4,8 +4,6 @@ use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::io::Read;
 
-use crate::git::{ObjectKind, objects::parse_body};
-
 // Pack object type tags (the 3-bit field in the entry header).
 const OBJ_COMMIT: u8 = 1;
 const OBJ_TREE: u8 = 2;
@@ -49,13 +47,10 @@ pub fn get_pack(bytes: &[u8]) -> Result<Pack<'_>> {
     Ok(Pack { count, objects })
 }
 
-pub fn parse_pack(pack: &Pack) -> Result<Vec<ObjectKind>> {
+pub fn parse_pack(pack: &Pack) -> Result<HashMap<String, (String, Vec<u8>)>> {
     let mut cursor = 0;
     let stream = pack.objects;
 
-    let mut objects: Vec<ObjectKind> = Vec::new();
-    // Raw (type, content) for every object decoded so far, keyed by its SHA-1,
-    // so ref-deltas can look up their base.
     let mut by_sha: HashMap<String, (String, Vec<u8>)> = HashMap::new();
 
     for _ in 0..pack.count {
@@ -91,13 +86,11 @@ pub fn parse_pack(pack: &Pack) -> Result<Vec<ObjectKind>> {
             _ => bail!("unsupported object type {}", obj_type),
         };
 
-        // Record for later delta bases, then parse into a typed object.
         let sha = hash_object(&type_str, &content);
         by_sha.insert(sha, (type_str.clone(), content.clone()));
-        objects.push(parse_body(&type_str, &content)?);
     }
 
-    Ok(objects)
+    Ok(by_sha)
 }
 
 /// Inflate a zlib stream, returning the decompressed bytes and how many

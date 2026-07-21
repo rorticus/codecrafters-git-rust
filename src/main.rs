@@ -53,6 +53,7 @@ enum Command {
     },
     Clone {
         url: String,
+        path: Option<String>,
     },
 }
 
@@ -194,11 +195,11 @@ fn main() -> Result<()> {
 
             println!("{}", hash);
         }
-        Command::Clone { url } => {
-            let cwd = env::current_dir()?;
+        Command::Clone { url, path } => {
+            let path = path.unwrap_or(env::current_dir()?.to_str().unwrap_or("").to_string());
             let url = Url::parse(&url)?;
 
-            clone(&cwd, url)?;
+            clone(Path::new(&path), url)?;
         }
     }
 

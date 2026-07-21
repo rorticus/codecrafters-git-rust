@@ -189,7 +189,13 @@ pub fn put_object(git_root: &Path, obj: &ObjectKind) -> Result<String> {
     // get the sha
     let sha = sha1_of(&obj_content);
 
-    let compressed_data = zlib_compress(&obj_content)?;
+    put_body(git_root, &sha, &obj_content)?;
+
+    return Ok(sha);
+}
+
+fn put_body(git_root: &Path, sha: &str, body: &[u8]) -> Result<()> {
+    let compressed_data = zlib_compress(&body)?;
 
     let lowercased = sha.to_lowercase();
     let (prefix, rest) = lowercased.split_at(2);
@@ -201,7 +207,17 @@ pub fn put_object(git_root: &Path, obj: &ObjectKind) -> Result<String> {
 
     std::fs::write(&object_path, &compressed_data)?;
 
-    return Ok(sha);
+    Ok(())
+}
+
+pub fn put_object_raw(git_root: &Path, sha: &str, obj_type: &str, body: &[u8]) -> Result<()> {
+    let mut full_body = Vec::new();
+    full_body.extend(format!("{} {}\0", obj_type, body.len()).as_bytes());
+    full_body.extend(body);
+
+    put_body(git_root, sha, &full_body)?;
+
+    Ok(())
 }
 
 fn zlib_compress(data: &[u8]) -> std::io::Result<Vec<u8>> {
