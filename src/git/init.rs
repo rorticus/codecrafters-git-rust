@@ -2,6 +2,10 @@ use std::fs;
 use std::path::Path;
 
 pub fn git_init(dir: &Path) {
+    if !fs::exists(dir).unwrap() {
+        fs::create_dir(dir).unwrap();
+    }
+
     fs::create_dir(dir.join(".git")).unwrap();
     fs::create_dir(dir.join(".git/objects")).unwrap();
     fs::create_dir(dir.join(".git/refs")).unwrap();
