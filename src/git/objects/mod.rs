@@ -15,6 +15,95 @@ fn split_once_byte(s: &[u8], sep: u8) -> Option<(&[u8], &[u8])> {
     Some((&s[..i], &s[i + 1..]))
 }
 
+/// Parse a loose object: `"<type> <size>\0<content>"`. Strips the header and
+/// dispatches to `parse_body`.
+pub fn parse_object(bytes: &[u8]) -> Result<ObjectKind> {
+    let nul = bytes
+        .iter()
+        .position(|&b| b == 0)
+        .ok_or_else(|| anyhow!("object header has no NUL terminator"))?;
+    let (header, content) = bytes.split_at(nul);
+    let content = &content[1..];
+
+    let (obj_type, _size) =
+        split_once_byte(header, b' ').ok_or_else(|| anyhow!("malformed object header"))?;
+    let obj_type = std::str::from_utf8(obj_type)?;
+    // let size: usize = std::str::from_utf8(size)?.parse()?;
+
+    parse_body(obj_type, content)
+}
+
+/// Parse an object body when the type is already known (e.g. from a packfile
+/// entry header). `content` is the raw, un-prefixed object content.
+pub fn parse_body(obj_type: &str, content: &[u8]) -> Result<ObjectKind> {
+    match obj_type {
+        "blob" => Ok(ObjectKind::Blob(content.to_vec())),
+        "tree" => {
+            let mut entries = Vec::new();
+
+            let mut content_left = &content[..];
+            loop {
+                if content_left.len() == 0 {
+                    break;
+                }
+
+                let (mode, rest) = split_once_byte(content_left, b' ').unwrap();
+                let (name, rest) = split_once_byte(rest, b'\0').unwrap();
+                let sha1 = &rest[0..20].to_vec();
+
+                content_left = &rest[20..];
+
+                entries.push(TreeEntry {
+                    mode: TreeEntryMode::from_mode(std::str::from_utf8(mode)?),
+                    name: std::str::from_utf8(name)?.to_string(),
+                    sha1: sha1.clone(),
+                });
+            }
+
+            Ok(ObjectKind::Tree(entries))
+        }
+        "commit" => {
+            let mut is_message = false;
+            let mut tree_sha = None;
+            let mut parents = Vec::new();
+            let mut author = None;
+            let mut committer = None;
+            let mut message = String::new();
+
+            for line in std::str::from_utf8(content)?.lines() {
+                if !is_message {
+                    if let Some(tree) = line.strip_prefix("tree ") {
+                        tree_sha = Some(tree.to_string());
+                    }
+
+                    if let Some(sha) = line.strip_prefix("parent ") {
+                        parents.push(sha.to_string());
+                    }
+                    if let Some(author_str) = line.strip_prefix("author ") {
+                        author = Some(CommitPerson::parse(author_str)?);
+                    }
+                    if let Some(committer_str) = line.strip_prefix("committer ") {
+                        committer = Some(CommitPerson::parse(committer_str)?);
+                    } else if line == "" {
+                        is_message = true;
+                    }
+                } else {
+                    message = message + line;
+                }
+            }
+
+            Ok(ObjectKind::Commit {
+                tree: tree_sha.ok_or_else(|| anyhow!("missing tree sha"))?,
+                parents,
+                author: author.ok_or_else(|| anyhow!("missing author"))?,
+                committer: committer.ok_or_else(|| anyhow!("missing committer"))?,
+                message,
+            })
+        }
+        t => bail!("unsupported object type {}", t),
+    }
+}
+
 pub fn get_object(git_root: &Path, sha: &str) -> Result<ObjectKind> {
     let lowercased = sha.to_lowercase();
     let (prefix, rest) = lowercased.split_at(2);
@@ -26,80 +115,7 @@ pub fn get_object(git_root: &Path, sha: &str) -> Result<ObjectKind> {
         let contents = std::fs::read(object_path)?;
         let out = zlib_decompress(&contents)?;
 
-        let nul = out.iter().position(|&b| b == 0).unwrap_or(0);
-        let (header, content) = out.split_at(nul);
-        let content = &content[1..];
-
-        let (obj_type, _size) = split_once_byte(header, b' ').unwrap();
-        let obj_type = std::str::from_utf8(obj_type)?;
-        // let size: usize = std::str::from_utf8(size)?.parse()?;
-
-        match obj_type {
-            "blob" => Ok(ObjectKind::Blob(content.to_vec())),
-            "tree" => {
-                let mut entries = Vec::new();
-
-                let mut content_left = &content[..];
-                loop {
-                    if content_left.len() == 0 {
-                        break;
-                    }
-
-                    let (mode, rest) = split_once_byte(content_left, b' ').unwrap();
-                    let (name, rest) = split_once_byte(rest, b'\0').unwrap();
-                    let sha1 = &rest[0..20].to_vec();
-
-                    content_left = &rest[20..];
-
-                    entries.push(TreeEntry {
-                        mode: TreeEntryMode::from_mode(std::str::from_utf8(mode)?),
-                        name: std::str::from_utf8(name)?.to_string(),
-                        sha1: sha1.clone(),
-                    });
-                }
-
-                Ok(ObjectKind::Tree(entries))
-            }
-            "commit" => {
-                let mut is_message = false;
-                let mut tree_sha = None;
-                let mut parent_sha = None;
-                let mut author = None;
-                let mut committer = None;
-                let mut message = String::new();
-
-                for line in std::str::from_utf8(content)?.lines() {
-                    if !is_message {
-                        if let Some(tree) = line.strip_prefix("tree ") {
-                            tree_sha = Some(tree.to_string());
-                        }
-
-                        if let Some(sha) = line.strip_prefix("parent ") {
-                            parent_sha = Some(sha.to_string());
-                        }
-                        if let Some(author_str) = line.strip_prefix("author ") {
-                            author = Some(CommitPerson::parse(author_str)?);
-                        }
-                        if let Some(committer_str) = line.strip_prefix("committer ") {
-                            committer = Some(CommitPerson::parse(committer_str)?);
-                        } else if line == "" {
-                            is_message = true;
-                        }
-                    } else {
-                        message = message + line;
-                    }
-                }
-
-                Ok(ObjectKind::Commit {
-                    tree: tree_sha.ok_or_else(|| anyhow!("missing tree sha"))?,
-                    parent: parent_sha.ok_or_else(|| anyhow!("missing parent commit"))?,
-                    author: author.ok_or_else(|| anyhow!("missing author"))?,
-                    committer: committer.ok_or_else(|| anyhow!("missing committer"))?,
-                    message,
-                })
-            }
-            t => bail!("unsupported object type {}", t),
-        }
+        parse_object(&out)
     } else {
         Err(anyhow!("object not found at {}", object_path.display()))
     }
@@ -144,7 +160,7 @@ pub fn put_object(git_root: &Path, obj: &ObjectKind) -> Result<String> {
         }
         ObjectKind::Commit {
             tree,
-            parent,
+            parents,
             author,
             committer,
             message,
@@ -153,7 +169,9 @@ pub fn put_object(git_root: &Path, obj: &ObjectKind) -> Result<String> {
             let mut content = String::new();
 
             content += format!("tree {}\n", tree).as_str();
-            content += format!("parent {}\n", parent).as_str();
+            for parent in parents {
+                content += format!("parent {}\n", parent).as_str();
+            }
             content += format!("author {}\n", author.to_str()).as_str();
             content += format!("committer {}\n", committer.to_str()).as_str();
             content += "\n";

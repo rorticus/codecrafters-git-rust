@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 
 pub enum TreeEntryMode {
     RegularFile,
@@ -25,7 +25,7 @@ pub enum ObjectKind {
     Tree(Vec<TreeEntry>),
     Commit {
         tree: String,
-        parent: String,
+        parents: Vec<String>,
         author: CommitPerson,
         committer: CommitPerson,
         message: String,
@@ -44,22 +44,29 @@ impl CommitPerson {
 
     pub fn parse(input: &str) -> Result<Self> {
         // <name> <<email>> <timestamp> <timezone>
-        let parts: Vec<&str> = input.split(" ").collect();
+        // The name may contain spaces, so anchor on the email brackets rather
+        // than splitting on whitespace from the front.
+        let (name, rest) = input
+            .split_once('<')
+            .ok_or_else(|| anyhow!("expecting '<' before email"))?;
+        let (email, rest) = rest
+            .split_once('>')
+            .ok_or_else(|| anyhow!("expecting '>' after email"))?;
 
-        if parts.len() != 4 {
-            bail!("malformed commita author");
-        }
+        // `rest` is " <timestamp> <timezone>".
+        let mut time_parts = rest.split_whitespace();
+        let timestamp = time_parts
+            .next()
+            .ok_or_else(|| anyhow!("missing timestamp"))?;
+        let timezone = time_parts
+            .next()
+            .ok_or_else(|| anyhow!("missing timezone"))?;
 
         return Ok(CommitPerson {
-            name: parts[0].to_string(),
-            email: parts[1]
-                .strip_prefix("<")
-                .ok_or_else(|| anyhow!("expecting email to start with <"))?
-                .strip_suffix(">")
-                .ok_or_else(|| anyhow!("expecting email to end with >"))?
-                .to_string(),
-            timestamp: parts[2].to_string(),
-            timezone: parts[3].to_string(),
+            name: name.trim().to_string(),
+            email: email.to_string(),
+            timestamp: timestamp.to_string(),
+            timezone: timezone.to_string(),
         });
     }
 

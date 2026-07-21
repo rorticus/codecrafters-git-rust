@@ -14,7 +14,7 @@ use clap::{Parser, Subcommand};
 
 use crate::git::{
     CommitPerson, ObjectKind, TreeEntry, TreeEntryMode, build_request, get_info_refs, get_object,
-    get_pack, parse_advertisement, post_upload_pack, put_object, strip_nak,
+    get_pack, parse_advertisement, parse_pack, post_upload_pack, put_object, strip_nak,
 };
 
 #[derive(Parser)]
@@ -183,7 +183,7 @@ fn main() -> Result<()> {
             let git_root = find_gitroot().ok_or_else(|| anyhow!("not a .git repository"))?;
             let obj = ObjectKind::Commit {
                 tree: sha,
-                parent,
+                parents: vec![parent],
                 author: CommitPerson::demo(),
                 committer: CommitPerson::demo(),
                 message,
@@ -205,8 +205,9 @@ fn main() -> Result<()> {
             let no_nak = strip_nak(&upload_pack)?;
 
             let pack = get_pack(&no_nak)?;
+            let objects = parse_pack(&pack)?;
 
-            println!("count of objects in pack: {}", pack.count);
+            println!("count of objects in pack: {}", objects.len());
         }
     }
 
