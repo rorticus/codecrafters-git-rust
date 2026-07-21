@@ -13,8 +13,9 @@ mod git;
 use clap::{Parser, Subcommand};
 
 use crate::git::{
-    CommitPerson, ObjectKind, TreeEntry, TreeEntryMode, build_request, get_info_refs, get_object,
-    get_pack, parse_advertisement, parse_pack, post_upload_pack, put_object, strip_nak,
+    CommitPerson, ObjectKind, TreeEntry, TreeEntryMode, build_request, clone, get_info_refs,
+    get_object, get_pack, git_init, parse_advertisement, parse_pack, post_upload_pack, put_object,
+    strip_nak,
 };
 
 #[derive(Parser)]
@@ -60,10 +61,10 @@ fn main() -> Result<()> {
 
     match args.command {
         Command::Init => {
-            fs::create_dir(".git").unwrap();
-            fs::create_dir(".git/objects").unwrap();
-            fs::create_dir(".git/refs").unwrap();
-            fs::write(".git/HEAD", "ref: refs/heads/main\n").unwrap();
+            let cwd = env::current_dir()?;
+
+            git_init(&cwd);
+
             println!("Initialized git directory")
         }
         Command::CatFile { print, sha } => {
@@ -194,20 +195,10 @@ fn main() -> Result<()> {
             println!("{}", hash);
         }
         Command::Clone { url } => {
+            let cwd = env::current_dir()?;
             let url = Url::parse(&url)?;
 
-            let advertisement_bytes = get_info_refs(&url)?;
-            let result = parse_advertisement(&advertisement_bytes)?;
-
-            let req_body = build_request(&[result.refs[0].sha.as_str()]);
-
-            let upload_pack = post_upload_pack(&url, &req_body)?;
-            let no_nak = strip_nak(&upload_pack)?;
-
-            let pack = get_pack(&no_nak)?;
-            let objects = parse_pack(&pack)?;
-
-            println!("count of objects in pack: {}", objects.len());
+            clone(&cwd, url)?;
         }
     }
 

@@ -1,13 +1,17 @@
 use std::path::PathBuf;
 
+mod clone;
 mod discovery;
+mod init;
 mod negotiate;
 mod objects;
 mod pack;
 mod pktline;
 mod transport;
 
+pub use clone::clone;
 pub use discovery::parse_advertisement;
+pub use init::git_init;
 pub use negotiate::{build_request, strip_nak};
 pub use objects::kind::{CommitPerson, ObjectKind, TreeEntry, TreeEntryMode};
 pub use objects::{get_object, put_object};
